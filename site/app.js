@@ -233,13 +233,13 @@ async function fillAllVegas() {
   if (!games.length) { toast("Every game already has a line."); return; }
   if (b) b.disabled = true;
   const now = new Date().toISOString();
-  const rows = games.map((g) => ({ game_id: g.id, spread: g.vegas_spread ?? null, total: g.vegas_total ?? null, updated_at: now }));
+  const rows = games.map((g) => ({ game_id: g.id, spread: dropHalf(g.vegas_spread), total: dropHalf(g.vegas_total), updated_at: now }));
   const { error } = await db.from("lines").upsert(rows);
   if (error) { toast("Couldn't fill the lines. Check your connection and try again."); if (b) b.disabled = false; return; }
   for (const r of rows) state.drafts[r.game_id] = { spread: r.spread == null ? null : Number(r.spread), total: r.total == null ? null : Number(r.total) };
   for (const d of Object.values(state.data)) if (d.raw) d.games = applyOverrides(d.raw);
   render();
-  toast(`Filled ${rows.length} game${rows.length === 1 ? "" : "s"} with Vegas lines. Change any you like, then press Publish lines.`);
+  toast(`Filled ${rows.length} game${rows.length === 1 ? "" : "s"} with Vegas lines (half points dropped). Change any you like, then press Publish lines.`);
 }
 
 function renderWeek() {
@@ -773,17 +773,20 @@ async function submitAdjust(useVegas) {
   let spread = null;
   if (fav === "pick") spread = 0;
   else if (fav !== "none") {
-    if (!(p >= 0)) { $("#adj-status").textContent = "Enter the points, like 3.5."; return; }
+    if (!(p >= 0)) { $("#adj-status").textContent = "Enter the points, like 3."; return; }
     spread = fav === "home" ? Math.abs(p) : -Math.abs(p);
   }
   const tv = $("#adj-total").value.trim(), t = parseFloat(tv);
-  if (tv && !(t > 0)) { $("#adj-status").textContent = "Enter the over/under, like 45.5, or leave it blank."; return; }
+  if (tv && !(t > 0)) { $("#adj-status").textContent = "Enter the over/under, like 45, or leave it blank."; return; }
   const total = tv ? t : null;
   $("#adj-status").textContent = "Saving…";
   if (await saveLine(g.id, spread == null && total == null ? null : { spread, total })) $("#adjust").close();
 }
 
+/** Your lines never carry a half point: 16.5 becomes 16, 40.5 becomes 40 (the database does the same). */
+const dropHalf = (v) => (v == null ? null : Math.trunc(Number(v)));
 async function saveLine(id, entry) {
+  if (entry) entry = { spread: dropHalf(entry.spread), total: dropHalf(entry.total) };
   const setStatus = (t) => { ($("#adjust").open ? $("#adj-status") : $("#admin-status")).textContent = t; };
   const res = entry
     ? await db.from("lines").upsert({ game_id: id, spread: entry.spread, total: entry.total, updated_at: new Date().toISOString() })

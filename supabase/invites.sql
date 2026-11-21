@@ -161,3 +161,17 @@ grant execute on function public.reset_invite(bigint) to authenticated;
 -- (Applied in Supabase as migrations player_numbers_on_tickets and player_numbers_no_gaps.)
 alter table public.tickets add column if not exists player_no bigint;
 alter table public.invites add column if not exists player_no bigint;
+
+-- ---------- Whole-point lines ----------
+-- The administrator's lines never carry a half point: 16.5 is saved (and published) as 16, 40.5 as 40.
+create or replace function public.lines_drop_half() returns trigger
+language plpgsql as $$
+begin
+  new.spread := trunc(new.spread);
+  new.total := trunc(new.total);
+  return new;
+end;
+$$;
+drop trigger if exists lines_drop_half on public.lines;
+create trigger lines_drop_half before insert or update on public.lines
+for each row execute function public.lines_drop_half();
