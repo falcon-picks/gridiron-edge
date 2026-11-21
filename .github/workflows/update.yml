@@ -59,6 +59,12 @@ jobs:
             git pull --rebase -q origin main && git push -q
           fi
 
+      - name: Stamp file versions (so browsers load new code right away, not a saved older copy)
+        run: |
+          v="${GITHUB_SHA::8}-${GITHUB_RUN_NUMBER}"
+          sed -i -E "s#(href=\"style\.css)\"#\1?v=$v\"#; s#(src=\"(config|app|boards)\.js)\"#\1?v=$v\"#g" site/index.html
+          grep -n "?v=" site/index.html
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
