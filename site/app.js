@@ -646,7 +646,7 @@ async function loadMyTickets() {
 }
 
 /** "Player #1117": each person's permanent number (from their invite), on every ticket. */
-const playerTag = (n) => (n ? `Player #${n}` : "");
+const playerNoLabel = (n) => (n ? `Player #${n}` : "");
 function ticketCard(t, games, admin = false) {
   const legs = t.ticket_picks || [];
   const grade = gradeTicket(t, legs, games);
@@ -697,7 +697,7 @@ function renderMyTickets() {
   let net = 0;
   for (const t of list) net += gradeTicket(t, t.ticket_picks || [], games).net;
   const mine = list.find((t) => t.player_no)?.player_no;
-  html += `<div class="summary">${mine ? stat("You are", playerTag(mine)) : ""}${stat("Tickets", String(list.length))}${stat("Net", `${net >= 0 ? "+" : "−"}${coins(Math.abs(net))}`)}</div>`;
+  html += `<div class="summary">${mine ? stat("You are", playerNoLabel(mine)) : ""}${stat("Tickets", String(list.length))}${stat("Net", `${net >= 0 ? "+" : "−"}${coins(Math.abs(net))}`)}</div>`;
   return html + `<div class="cards">${list.map((t) => ticketCard(t, games)).join("")}</div>`;
 }
 
@@ -837,7 +837,7 @@ function renderDeadlineForm() {
 function adminPlayerLabel(t) {
   const who = state.playerNames?.[t.player_no];
   if (!t.player_no) return t.name;
-  const base = `${playerTag(t.player_no)} · ${who || t.name}`;
+  const base = `${playerNoLabel(t.player_no)} · ${who || t.name}`;
   return who && who.toLowerCase() !== String(t.name).toLowerCase() ? `${base} (ticket says “${t.name}”)` : base;
 }
 async function loadPlayerNames() {
@@ -1038,7 +1038,7 @@ async function loadInvites() {
 function renderInvites() {
   const when = (t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   $("#invite-list").innerHTML = invites.length ? invites.map((v) => `<div class="row invite-row">
-    <span class="t"><b>${esc(v.name)}</b>${v.player_no ? ` <span class="r">· ${playerTag(v.player_no)}</span>` : ""}<br><span class="r">${v.claimed_at ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved to a new device ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}` : "Link not opened yet"}</span>
+    <span class="t"><b>${esc(v.name)}</b>${v.player_no ? ` <span class="r">· ${playerNoLabel(v.player_no)}</span>` : ""}<br><span class="r">${v.claimed_at ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved to a new device ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}` : "Link not opened yet"}</span>
     <input class="invite-link" readonly value="${esc(inviteLink(v.code))}"></span>
     <span class="invite-btns"><button class="pick primary" data-invite-copy="${esc(v.code)}">Copy link</button>
     <button class="pick" data-invite-reset="${v.id}">Reset</button><button class="pick danger" data-invite-remove="${v.id}">Remove</button></span></div>`).join("")
