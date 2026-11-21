@@ -175,3 +175,10 @@ $$;
 drop trigger if exists lines_drop_half on public.lines;
 create trigger lines_drop_half before insert or update on public.lines
 for each row execute function public.lines_drop_half();
+
+-- ---------- Player # per invite; moving a link takes a tap ----------
+-- (Applied in Supabase as migrations invite_player_numbers_and_switching and invite_status.)
+-- • invites.player_no is assigned when the invite is created (from players_number_seq).
+-- • claim_invite makes the device that person: their tickets/squares (by Player #) come to it,
+--   and if the device was someone else before, that person's things leave it.
+-- • invite_status(code) tells the website whether opening a link would move it, so it can ask first.

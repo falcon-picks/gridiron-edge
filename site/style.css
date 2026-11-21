@@ -361,3 +361,8 @@ body.locked .tabs, body.locked .leagues, body.locked #about-btn { display: none;
 .board-multi-item .sq-legend { font-size: 12px; }
 
 #admin-btn { font-size: 18px; line-height: 1; margin-right: -8px; }
+
+.invite-offer { max-width: 720px; margin: 12px auto; padding: 12px 14px; border-radius: 12px; background: #fff4e5; color: #6b3a00; }
+.invite-offer .pick { margin-right: 8px; }
+@media (prefers-color-scheme: dark) { .invite-offer { background: #2e2210; color: #f2c27a; } }
+#invite-offer:empty { display: none; }

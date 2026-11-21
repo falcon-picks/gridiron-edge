@@ -371,6 +371,7 @@ function render() {
   document.body.classList.toggle("locked", !!state.locked);
   $("#admin-btn").hidden = !isAdmin();
   if (state.locked) { $("#main").innerHTML = lockedScreen(); $("#updated").textContent = ""; return; }
+  $("#invite-offer").innerHTML = inviteOfferHTML();
   document.querySelectorAll("[data-league]").forEach((b) => b.setAttribute("aria-selected", b.dataset.league === state.league));
   document.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
   $("#tab-picks").hidden = !isAdmin();
@@ -430,6 +431,11 @@ document.addEventListener("click", (e) => {
   else if (b.id === "fill-vegas") { if (b.dataset.armed) fillAllVegas(); else { b.dataset.armed = "1"; b.textContent = `Tap again to fill ${vegasFillable().length} blank line${vegasFillable().length === 1 ? "" : "s"}`; } }
   else if (b.id === "admin-signout") adminSignOut();
   else if (b.dataset.inviteCopy) copyInvite(b.dataset.inviteCopy);
+  else if (b.dataset.inviteClaim) {
+    b.disabled = true;
+    claimInvite(state.inviteOffer.code).then(() => location.reload()).catch(() => { b.disabled = false; toast("Couldn't switch. Check your connection and try again."); });
+  }
+  else if (b.dataset.inviteDismiss) { state.inviteOffer = null; history.replaceState(null, "", location.pathname + location.search); render(); }
   else if (b.dataset.inviteReset) { if (b.dataset.armed) resetInvite(Number(b.dataset.inviteReset)); else { b.dataset.armed = "1"; b.textContent = "Tap again: new link"; } }
   else if (b.dataset.inviteRemove) { if (b.dataset.armed) removeInvite(Number(b.dataset.inviteRemove)); else { b.dataset.armed = "1"; b.textContent = "Tap again to remove"; } }
   else if (b.id === "deadline-save") {
@@ -844,8 +850,8 @@ function adminPlayerLabel(t) {
   return who && who.toLowerCase() !== String(t.name).toLowerCase() ? `${base} (ticket says “${t.name}”)` : base;
 }
 async function loadPlayerNames() {
-  const { data } = await db.from("players").select("number,name");
-  if (data) state.playerNames = Object.fromEntries(data.map((p) => [p.number, p.name]));
+  const [{ data }, { data: inv }] = await Promise.all([db.from("players").select("number,name"), db.from("invites").select("player_no,name")]);
+  state.playerNames = Object.fromEntries([...(data || []).map((p) => [p.number, p.name]), ...(inv || []).map((v) => [v.player_no, v.name])]);
 }
 
 async function loadAllPicks() {
@@ -992,24 +998,43 @@ async function handleInviteLink() {
   if (!m || !db) return;
   // The link stays in the address bar, so a refresh (even in a browser that forgets everything) still works.
   if (isAdmin()) { state.inviteMessage = "You're signed in as the administrator, so this link wasn't used. Send it to the player to open on their device."; return; }
+  const code = m[1];
   try {
     if (!session) {
       const { data, error } = await db.auth.signInAnonymously();
       if (error) throw error;
       session = data.session;
     }
-    if (session) {
-      const { data: already } = await db.rpc("am_member");
-      if (already === true) return;
-    }
-    const { data, error } = await db.rpc("claim_invite", { p_code: m[1] });
-    if (error) throw error;
-    if (data && !playerName()) save("player_name", data);
-    state.inviteMessage = `Welcome${data ? `, ${data}` : ""}! This device now has access.`;
+    const { data: st, error: stErr } = await db.rpc("invite_status", { p_code: code });
+    if (stErr) throw stErr;
+    if (!st || st.status === "invalid") { state.inviteMessage = "This link isn't valid. Ask the administrator for a new one."; return; }
+    if (st.status === "mine") return;
+    // A brand-new link on a device that isn't anyone yet: open it right away.
+    if (st.status === "free" && !st.current) { await claimInvite(code); return; }
+    // Anything else would move a link between devices or people, so it takes a tap (no bouncing on refresh).
+    state.inviteOffer = { code, name: st.name, current: st.current, taken: st.status === "taken" };
   } catch (err) {
     const msg = String(err && err.message || "");
     state.inviteMessage = /Invite:/.test(msg) ? msg.replace(/^.*?Invite:\s*/, "") : "Couldn't open your invite. Check your connection and open the link again.";
   }
+}
+
+async function claimInvite(code) {
+  const { data, error } = await db.rpc("claim_invite", { p_code: code });
+  if (error) throw error;
+  if (data) save("player_name", data);
+  state.inviteMessage = `Welcome${data ? `, ${data}` : ""}! This device now has access.`;
+}
+
+/** "Use this link on this device?" — shown when opening a link would move it. */
+function inviteOfferHTML() {
+  const o = state.inviteOffer;
+  if (!o) return "";
+  const why = o.current
+    ? `This device is signed in as <b>${esc(o.current)}</b>, but this link is for <b>${esc(o.name)}</b>.`
+    : `This link (<b>${esc(o.name)}</b>) is being used on another device.`;
+  return `<div class="invite-offer"><p>${why} Use it on this device? ${o.taken ? "The other device will be signed out." : ""}</p>
+    <button class="pick primary" data-invite-claim="1">Use it here</button>${o.current ? `<button class="pick" data-invite-dismiss="1">Stay as ${esc(o.current)}</button>` : ""}</div>`;
 }
 
 async function checkMember() {
@@ -1018,7 +1043,7 @@ async function checkMember() {
   if (!session) return false;
   const { data, error } = await db.rpc("am_member");
   if (!error && data === true) { save("had_access", true); return true; }
-  if (load("had_access", false)) state.inviteMessage = state.inviteMessage || "Your link was opened on another device, so this one was signed out. Open your link again here to switch back.";
+  if (load("had_access", false) && !state.inviteOffer) state.inviteMessage = state.inviteMessage || "Your link was opened on another device, so this one was signed out. Open your link again here to switch back.";
   return false;
 }
 
@@ -1027,6 +1052,7 @@ function lockedScreen() {
     <div class="lock-icon">🔒</div>
     <h1>Invite only</h1>
     ${state.inviteMessage ? `<p class="warn">${esc(state.inviteMessage)}</p>` : ""}
+    ${inviteOfferHTML()}
     <p>Gridiron Edge is private. To play, open the personal link the administrator sent you, on the device you'll play on.</p>
     <p class="note">Your link works on one device at a time. If you got a new phone or cleared your browser, just open your link again.</p>
   </div>`;
@@ -1041,7 +1067,7 @@ async function loadInvites() {
 function renderInvites() {
   const when = (t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   $("#invite-list").innerHTML = invites.length ? invites.map((v) => `<div class="row invite-row">
-    <span class="t"><b>${esc(v.name)}</b>${v.player_no ? ` <span class="r">· ${playerNoLabel(v.player_no)}</span>` : ""}<br><span class="r">${v.claimed_at ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved to a new device ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}` : "Link not opened yet"}</span>
+    <span class="t"><b>${esc(v.name)}</b>${v.player_no ? ` <span class="r">· ${playerNoLabel(v.player_no)}</span>` : ""}<br><span class="r">${v.claimed_at ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved to a new device ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}${v.moves >= 3 ? `<br><b class="warn">⚠ This link may be shared with other people. Press Reset and send ${esc(v.name)} the new link.</b>` : ""}` : "Link not opened yet"}</span>
     <input class="invite-link" readonly value="${esc(inviteLink(v.code))}"></span>
     <span class="invite-btns"><button class="pick primary" data-invite-copy="${esc(v.code)}">Copy link</button>
     <button class="pick" data-invite-reset="${v.id}">Reset</button><button class="pick danger" data-invite-remove="${v.id}">Remove</button></span></div>`).join("")
