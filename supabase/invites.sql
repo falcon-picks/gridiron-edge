@@ -182,3 +182,6 @@ for each row execute function public.lines_drop_half();
 -- • claim_invite makes the device that person: their tickets/squares (by Player #) come to it,
 --   and if the device was someone else before, that person's things leave it.
 -- • invite_status(code) tells the website whether opening a link would move it, so it can ask first.
+
+-- New invites draw their Player # from this sequence, so the administrator needs to be allowed to use it.
+grant usage on sequence public.players_number_seq to authenticated;
