@@ -431,6 +431,7 @@ document.addEventListener("click", (e) => {
   else if (b.id === "fill-vegas") { if (b.dataset.armed) fillAllVegas(); else { b.dataset.armed = "1"; b.textContent = `Tap again to fill ${vegasFillable().length} blank line${vegasFillable().length === 1 ? "" : "s"}`; } }
   else if (b.id === "admin-signout") adminSignOut();
   else if (b.dataset.inviteCopy) copyInvite(b.dataset.inviteCopy);
+  else if (b.dataset.inviteShare) shareInvite(b.dataset.inviteShare);
   else if (b.dataset.inviteClaim) {
     b.disabled = true;
     claimInvite(state.inviteOffer.code).then(() => location.reload()).catch(() => { b.disabled = false; toast("Couldn't switch. Check your connection and try again."); });
@@ -1066,10 +1067,10 @@ async function loadInvites() {
 }
 function renderInvites() {
   const when = (t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  $("#invite-list").innerHTML = invites.length ? invites.map((v) => `<div class="row invite-row">
+  $("#invite-list").innerHTML = invites.length ? invites.map((v) => `<div class="row invite-row${state.inviteNew === v.id ? " invite-new-row" : ""}">
     <span class="t"><b>${esc(v.name)}</b>${v.player_no ? ` <span class="r">· ${playerNoLabel(v.player_no)}</span>` : ""}<br><span class="r">${v.claimed_at ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved to a new device ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}${v.moves >= 3 ? `<br><b class="warn">⚠ This link may be shared with other people. Press Reset and send ${esc(v.name)} the new link.</b>` : ""}` : "Link not opened yet"}</span>
     <input class="invite-link" readonly value="${esc(inviteLink(v.code))}"></span>
-    <span class="invite-btns"><button class="pick primary" data-invite-copy="${esc(v.code)}">Copy link</button>
+    <span class="invite-btns">${navigator.share ? `<button class="pick primary" data-invite-share="${esc(v.code)}">Share</button>` : ""}<button class="pick${navigator.share ? "" : " primary"}" data-invite-copy="${esc(v.code)}">Copy link</button>
     <button class="pick" data-invite-reset="${v.id}">Reset</button><button class="pick danger" data-invite-remove="${v.id}">Remove</button></span></div>`).join("")
     : `<div class="row"><span class="t r">No invites yet. Type a name above and press Create link.</span></div>`;
 }
@@ -1080,18 +1081,39 @@ async function createInvite() {
   const { data, error } = await db.from("invites").insert({ name }).select("id,name,code,claimed_at,created_at,moves,player_no").single();
   if (error) { $("#invite-status").textContent = "Couldn't create the link. Try again."; return; }
   $("#invite-name").value = "";
-  invites.push(data); renderInvites();
-  await copyInvite(data.code, `Link for ${name} created and copied. Send it to them.`);
+  invites.push(data); state.inviteNew = data.id; renderInvites();
+  // No automatic copying: phones block copying that isn't part of a tap, and an old clipboard (like this
+  // page's own #admin address) would get pasted instead. The Share and Copy buttons on the row are taps.
+  $("#invite-status").textContent = `Link for ${name} (Player #${data.player_no}) is ready. Press Share or Copy link on ${name}'s row.`;
 }
-async function copyInvite(code, done = "Link copied. Paste it into a text or email.") {
-  try { await navigator.clipboard.writeText(inviteLink(code)); $("#invite-status").textContent = done; }
-  catch { $("#invite-status").textContent = "Copy the link from the box under the name."; }
+/** Copies one person's link. Runs right inside the tap, with a fallback for browsers that block the clipboard. */
+function copyInvite(code) {
+  const v = invites.find((x) => x.code === code), link = inviteLink(code);
+  const done = () => { $("#invite-status").textContent = `Copied ${v ? v.name + "'s" : "the"} link. Paste it into a text or email to ${v ? v.name : "them"}.`; };
+  const fallback = () => {
+    const box = [...document.querySelectorAll(".invite-link")].find((i) => i.value === link);
+    if (box) { box.focus(); box.select(); box.setSelectionRange(0, link.length); }
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    if (ok) done(); else $("#invite-status").textContent = `Couldn't copy automatically. The link is selected in the box under ${v ? v.name : "the name"}: copy it from there.`;
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(link).then(done, fallback);
+  else fallback();
+}
+/** Opens the phone's share sheet (Messages, email…) with one person's link, like the app's Send link. */
+function shareInvite(code) {
+  const v = invites.find((x) => x.code === code);
+  navigator.share({ title: "Your Gridiron Edge invite", text: `Here's your personal Gridiron Edge link${v ? ", " + v.name : ""}. Open it on the phone or computer you'll play on. It works on one device at a time.`, url: inviteLink(code) })
+    .then(() => { $("#invite-status").textContent = `Shared ${v ? v.name + "'s" : "the"} link.`; })
+    .catch(() => {});
 }
 async function resetInvite(id) {
   const { data, error } = await db.rpc("reset_invite", { p_id: id });
   if (error) { $("#invite-status").textContent = "Couldn't reset. Try again."; return; }
   await loadInvites();
-  await copyInvite(data, "New link created and copied. The old link no longer works, and the device using it is signed out.");
+  const v = invites.find((x) => x.code === data);
+  if (v) { state.inviteNew = v.id; renderInvites(); }
+  $("#invite-status").textContent = `New link ready${v ? " for " + v.name : ""}. The old link no longer works. Press Share or Copy link on ${v ? v.name + "'s" : "their"} row.`;
 }
 async function removeInvite(id) {
   const { error } = await db.from("invites").delete().eq("id", id);

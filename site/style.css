@@ -366,3 +366,5 @@ body.locked .tabs, body.locked .leagues, body.locked #about-btn { display: none;
 .invite-offer .pick { margin-right: 8px; }
 @media (prefers-color-scheme: dark) { .invite-offer { background: #2e2210; color: #f2c27a; } }
 #invite-offer:empty { display: none; }
+
+.invite-new-row { outline: 2px solid #ffd27a; border-radius: 10px; }
