@@ -185,3 +185,8 @@ for each row execute function public.lines_drop_half();
 
 -- New invites draw their Player # from this sequence, so the administrator needs to be allowed to use it.
 grant usage on sequence public.players_number_seq to authenticated;
+
+-- Published lines never carry a half point either (players only ever see whole numbers).
+drop trigger if exists published_lines_drop_half on public.published_lines;
+create trigger published_lines_drop_half before insert or update on public.published_lines
+for each row execute function public.lines_drop_half();
