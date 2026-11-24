@@ -1077,7 +1077,7 @@ function renderInvites() {
     return `<div class="invite-card${state.inviteNew === v.id ? " invite-new-row" : ""}">
     <div class="invite-head"><b class="invite-name">${who}</b><span class="invite-no">${v.player_no ? playerNoLabel(v.player_no) : ""}</span></div>
     <div class="r invite-status">${status}</div>
-    ${v.moves >= 3 ? `<div class="warn invite-warn">⚠ This link may be shared with other people. Press Reset and send ${who} the new link.</div>` : ""}
+    ${v.moves >= 3 ? `<div class="invite-warn">⚠ May be shared. Reset it and send ${who} the new link.</div>` : ""}
     <input class="invite-link" readonly value="${esc(inviteLink(v.code))}" aria-label="${who}'s link">
     <div class="invite-send">${navigator.share ? `<button class="pick primary" data-invite-share="${esc(v.code)}">Share ${who}'s link</button>` : ""}<button class="pick${navigator.share ? "" : " primary"}" data-invite-copy="${esc(v.code)}">Copy ${who}'s link</button></div>
     <div class="invite-manage"><button class="pick" data-invite-reset="${v.id}">Reset</button><button class="pick danger" data-invite-remove="${v.id}">Remove</button></div>

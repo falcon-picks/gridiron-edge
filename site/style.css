@@ -388,3 +388,6 @@ body.locked .tabs, body.locked .leagues, body.locked #about-btn { display: none;
   .invite-send { flex-direction: column; }
   .invite-send .pick { flex: none; width: 100%; }
 }
+
+.invite-warn { background: #fff4e5; color: #8a4b00; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; line-height: 1.35; margin: 0; }
+@media (prefers-color-scheme: dark) { .invite-warn { background: #2e2210; color: #f2c27a; } }
