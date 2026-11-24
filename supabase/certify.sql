@@ -132,3 +132,7 @@ end;
 $$;
 revoke all on function public.certify_ticket(bigint, boolean) from public;
 grant execute on function public.certify_ticket(bigint, boolean) to authenticated;
+
+-- ---------- Certify deadline is 30 minutes (was 1 hour) ----------
+-- Applied in Supabase as migration certify_30_minutes: ticket_certify_by, void_uncertified_tickets and
+-- place_ticket now use interval '30 minutes' before the first game.

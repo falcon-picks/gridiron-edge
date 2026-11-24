@@ -690,13 +690,13 @@ function ticketCard(t, games, admin = false) {
 /** When a ticket must be certified by: one hour before its first game. */
 function certifyBy(legs) {
   const k = legs.map((l) => l.kickoff).filter(Boolean).sort()[0];
-  return k ? new Date(new Date(k).getTime() - 60 * 60 * 1000) : null;
+  return k ? new Date(new Date(k).getTime() - 30 * 60 * 1000) : null;
 }
 function certifyRow(t, legs, admin) {
   const by = certifyBy(legs), open = !by || by > new Date();
   const byText = by ? by.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
   if (t.voided_at) {
-    return `<div class="tb-row certify pending"><span>✕ Voided: not certified an hour before the first game.</span><span class="spacer"></span>${admin ? `<button class="pick primary" data-certify="${t.number}" data-override="1">Override void</button>` : ""}</div>`;
+    return `<div class="tb-row certify pending"><span>✕ Voided: not certified 30 minutes before the first game.</span><span class="spacer"></span>${admin ? `<button class="pick primary" data-certify="${t.number}" data-override="1">Override void</button>` : ""}</div>`;
   }
   if (t.certified_at) {
     return `<div class="tb-row certify ok"><span>✓ Certified</span><span class="spacer"></span>${admin && open ? `<button class="pick" data-uncertify="${t.number}">Undo certify</button>` : ""}</div>`;
@@ -934,7 +934,7 @@ function renderAllPicks() {
   const count = (st) => graded.filter((x) => x.grade.status === st).length;
   html += `<div class="toolbar"><label for="picks-week">${periodWord()}:</label><select id="picks-week">${weeks.map((x) => `<option value="${x}" ${x === w ? "selected" : ""}>${esc(weekLabel(x))}</option>`).join("")}</select>
     <button class="pick" id="picks-refresh">Refresh</button><button class="pick" id="picks-csv">Download spreadsheet</button></div>
-    ${(() => { const n = tickets.filter((t) => !t.certified_at && !t.voided_at).length; return n ? `<div class="publish-bar pending"><span>${n} ticket${n === 1 ? "" : "s"} not certified yet. Press Certify on each one at least an hour before its first game, or it's voided automatically.</span></div>` : ""; })()}
+    ${(() => { const n = tickets.filter((t) => !t.certified_at && !t.voided_at).length; return n ? `<div class="publish-bar pending"><span>${n} ticket${n === 1 ? "" : "s"} not certified yet. Press Certify on each one at least 30 minutes before its first game, or it's voided automatically.</span></div>` : ""; })()}
     <div class="summary">${stat("Tickets", String(tickets.length))}${stat("Won", String(count("won")))}${stat("Lost", String(count("lost")))}${stat("Pending", String(count("pending")))}${count("void") ? stat("Voided", String(count("void"))) : ""}${stat("Wagered", coins(wagered))}${stat("Paid out", coins(paid))}</div>`;
   const order = { won: 0, pending: 1, refund: 2, lost: 3, void: 4 };
   graded.sort((a, b) => order[a.grade.status] - order[b.grade.status] || b.grade.net - a.grade.net || a.t.number - b.t.number);
@@ -942,7 +942,7 @@ function renderAllPicks() {
     + graded.map(({ t, grade }) => `<div class="row"><span class="t"><b>#${t.number}</b> ${esc(state.playerNames?.[t.player_no] || t.name)}</span><span class="c wide">${t.player_no ? `#${t.player_no}` : "—"}</span><span class="c">${t.legs}</span><span class="c">${t.wager}</span>
       <span class="c wide status-pill ${grade.status}">${esc(grade.status === "won" ? `+${coins(grade.net)}` : grade.status === "lost" ? `−${coins(t.wager)}` : grade.label)}</span></div>`).join("") + `</div>`;
   html += `<h2>Every ticket</h2><div class="cards">${graded.map(({ t }) => ticketCard(t, games, true)).join("")}</div>`;
-  return html + `<p class="note">A ✗ is a losing pick. Any loss loses the ticket, except that a 10-pick ticket still pays for 9 of 10 or 0 of 10. A push drops that pick, and the ticket is paid at the smaller size; with fewer than ${MIN_LEGS} winning picks left, the wager is returned. Each pick is judged at the line when the ticket was placed. Void removes a ticket for good. A ticket that isn't certified an hour before its first game is voided automatically; press Override void to let it count anyway.</p>`;
+  return html + `<p class="note">A ✗ is a losing pick. Any loss loses the ticket, except that a 10-pick ticket still pays for 9 of 10 or 0 of 10. A push drops that pick, and the ticket is paid at the smaller size; with fewer than ${MIN_LEGS} winning picks left, the wager is returned. Each pick is judged at the line when the ticket was placed. Void removes a ticket for good. A ticket that isn't certified 30 minutes before its first game is voided automatically; press Override void to let it count anyway.</p>`;
 }
 
 function downloadPicks() {
