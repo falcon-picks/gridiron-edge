@@ -3,8 +3,8 @@
 // Supabase database (see supabase/setup.sql); config.js says where it is.
 "use strict";
 
-const LEAGUES = { nfl: "NFL", college: "College", nba: "NBA", mlb: "MLB" };
-const MARGIN_SPREAD = { nfl: 13.5, college: 16, nba: 12, mlb: 4.4 };
+const LEAGUES = { nfl: "NFL", college: "College", nba: "NBA", cbb: "NCAAB", mlb: "MLB" };
+const MARGIN_SPREAD = { nfl: 13.5, college: 16, nba: 12, cbb: 11, mlb: 4.4 };
 const SPREAD_HIGHLIGHT = 3, TOTAL_HIGHLIGHT = 5, MLB_HIGHLIGHT = 0.05;
 
 const state = {
@@ -138,21 +138,35 @@ function unpublishedIds() {
   return [...ids].filter((id) => !sameLine(state.drafts[id], state.published[id]));
 }
 const hasVegas = (g) => (g.vegas_spread !== undefined ? g.vegas_spread : g.spread) != null;
-const scored = (games) => games.filter((g) => isFinal(g) && (state.league !== "college" || hasVegas(g)));
+/** College football and college basketball show only games that have a Vegas line. */
+const linedOnly = () => state.league === "college" || state.league === "cbb";
+/** College basketball is grouped by day instead of by week. */
+const byDay = () => state.league === "cbb";
+const scored = (games) => games.filter((g) => isFinal(g) && (!linedOnly() || hasVegas(g)));
 const seasonGames = () => D().games.filter((g) => g.season === D().current_season);
 const pickMode = () => D().pick_mode;
 
 function upcomingWeek() {
-  const weeks = seasonGames().filter((g) => !isFinal(g) && (hasVegas(g) || state.league !== "college")).map((g) => g.week);
+  const now = new Date();
+  const weeks = seasonGames().filter((g) => !isFinal(g) && (hasVegas(g) || !linedOnly())
+    && (!byDay() || !g.kickoff || new Date(g.kickoff) > now)).map((g) => g.week);
   return weeks.length ? Math.min(...weeks) : null;
 }
 function upcomingGames() {
   const w = upcomingWeek(); if (w == null) return [];
-  return seasonGames().filter((g) => g.week === w && !isFinal(g) && (state.league !== "college" || hasVegas(g)))
+  return seasonGames().filter((g) => g.week === w && !isFinal(g) && (!linedOnly() || hasVegas(g)))
     .sort((a, b) => (a.kickoff || "").localeCompare(b.kickoff || "") || a.id.localeCompare(b.id));
 }
 const completedWeeks = () => [...new Set(seasonGames().filter(isFinal).map((g) => g.week))].sort((a, b) => b - a);
-const weekLabel = (w) => (state.league === "college" && w >= 20 ? "Bowls & Playoff" : `Week ${w}`);
+/** College basketball: the day's date, like "Tue, Nov 24" (Eastern time, the way schedules list it). */
+function dayLabel(w, short = false) {
+  const g = D().games.find((x) => x.week === w && x.kickoff);
+  if (!g) return `Day ${w}`;
+  return new Date(g.kickoff).toLocaleDateString(undefined, short ? { month: "numeric", day: "numeric", timeZone: "America/New_York" }
+    : { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
+}
+const weekLabel = (w) => (byDay() ? dayLabel(w) : state.league === "college" && w >= 20 ? "Bowls & Playoff" : `Week ${w}`);
+const periodWord = () => (byDay() ? "Day" : "Week");
 
 // ---------- records ----------
 function modelSU(games) { const r = newRec(); scored(games).forEach((g) => { const a = actualWinner(g); if (a) add(r, modelWinner(g) === a); else add(r, null); }); return r; }
@@ -264,10 +278,10 @@ function renderResults() {
   const weeks = completedWeeks();
   if (!weeks.length) return `<h1>Results</h1><div class="empty">No finished games yet this season.</div>`;
   const w = weeks.includes(state.week) ? state.week : weeks[0];
-  const games = seasonGames().filter((g) => g.week === w && isFinal(g) && (state.league !== "college" || hasVegas(g)))
+  const games = seasonGames().filter((g) => g.week === w && isFinal(g) && (!linedOnly() || hasVegas(g)))
     .sort((a, b) => (a.kickoff || "").localeCompare(b.kickoff || ""));
   let html = `<h1>${esc(weekLabel(w))} Results</h1>
-    <div class="toolbar"><label for="week">Week:</label><select id="week">${weeks.map((x) => `<option value="${x}" ${x === w ? "selected" : ""}>${esc(weekLabel(x))}</option>`).join("")}</select></div>
+    <div class="toolbar"><label for="week">${periodWord()}:</label><select id="week">${weeks.map((x) => `<option value="${x}" ${x === w ? "selected" : ""}>${esc(weekLabel(x))}</option>`).join("")}</select></div>
     <div class="cards">`;
   for (const g of games) {
     const winner = actualWinner(g);
@@ -304,7 +318,7 @@ function weeklyChart(season) {
     const x = 34 + i * (2 * bw + gap);
     if (p.m != null) bars += `<rect x="${x}" y="${top + h - p.m * h}" width="${bw}" height="${p.m * h}" rx="2" fill="var(--muted)"><title>Model ${weekLabel(p.w)}: ${Math.round(p.m * 100)}%</title></rect>`;
     if (p.y != null) bars += `<rect x="${x + bw}" y="${top + h - p.y * h}" width="${bw}" height="${p.y * h}" rx="2" fill="var(--accent)"><title>You ${weekLabel(p.w)}: ${Math.round(p.y * 100)}%</title></rect>`;
-    bars += `<text x="${x + bw}" y="${top + h + 16}" font-size="10" text-anchor="middle" fill="var(--muted)">${state.league === "college" && p.w >= 20 ? "Bowl" : "W" + p.w}</text>`;
+    bars += `<text x="${x + bw}" y="${top + h + 16}" font-size="10" text-anchor="middle" fill="var(--muted)">${byDay() ? dayLabel(p.w, true) : state.league === "college" && p.w >= 20 ? "Bowl" : "W" + p.w}</text>`;
   });
   const grid = [0, 0.5, 1].map((v) => `<line x1="30" x2="${width}" y1="${top + h - v * h}" y2="${top + h - v * h}" stroke="var(--line)"/><text x="0" y="${top + h - v * h + 4}" font-size="10" fill="var(--muted)">${v * 100}%</text>`).join("");
   return `<h2>${pickMode() === "spread" ? "Against the spread, week by week" : "Picking winners, week by week"}</h2>
@@ -361,6 +375,7 @@ function renderRatings() {
     nfl: "Points better (+) or worse (−) than an average NFL team on a neutral field. To predict a game, subtract the two ratings and add 1.5 points for the home team.",
     college: "Points better (+) or worse (−) than an average top-division (FBS) team on a neutral field. To predict a game, subtract the two ratings and add 2.5 points for the home team.",
     nba: "Points better (+) or worse (−) than an average NBA team on a neutral court. To predict a game, subtract the two ratings and add 2.5 points for the home team.",
+    cbb: "Points better (+) or worse (−) than an average major-conference team on a neutral court. To predict a game, subtract the two ratings and add 3.5 points for the home team.",
     mlb: "Runs better (+) or worse (−) than an average MLB team. To predict a game, subtract the two ratings and add 0.25 runs for the home team.",
   }[state.league];
   return `<h1>Power Ratings</h1><div class="table">${D().ranked.map(([t, r], i) =>
@@ -917,7 +932,7 @@ function renderAllPicks() {
   const wagered = tickets.filter((t) => !t.voided_at).reduce((a, t) => a + t.wager, 0);
   const paid = graded.filter((x) => x.grade.status === "won").reduce((a, x) => a + x.grade.net + x.t.wager, 0);
   const count = (st) => graded.filter((x) => x.grade.status === st).length;
-  html += `<div class="toolbar"><label for="picks-week">Week:</label><select id="picks-week">${weeks.map((x) => `<option value="${x}" ${x === w ? "selected" : ""}>${esc(weekLabel(x))}</option>`).join("")}</select>
+  html += `<div class="toolbar"><label for="picks-week">${periodWord()}:</label><select id="picks-week">${weeks.map((x) => `<option value="${x}" ${x === w ? "selected" : ""}>${esc(weekLabel(x))}</option>`).join("")}</select>
     <button class="pick" id="picks-refresh">Refresh</button><button class="pick" id="picks-csv">Download spreadsheet</button></div>
     ${(() => { const n = tickets.filter((t) => !t.certified_at && !t.voided_at).length; return n ? `<div class="publish-bar pending"><span>${n} ticket${n === 1 ? "" : "s"} not certified yet. Press Certify on each one at least an hour before its first game, or it's voided automatically.</span></div>` : ""; })()}
     <div class="summary">${stat("Tickets", String(tickets.length))}${stat("Won", String(count("won")))}${stat("Lost", String(count("lost")))}${stat("Pending", String(count("pending")))}${count("void") ? stat("Voided", String(count("void"))) : ""}${stat("Wagered", coins(wagered))}${stat("Paid out", coins(paid))}</div>`;

@@ -281,6 +281,104 @@ def nba_games(key, current_season):
     return games, names
 
 
+# ---------------------------------------------------------------- College basketball (ESPN, no key)
+
+CBB_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+# ESPN conference ids: ACC, Big East, Big Ten, Big 12, SEC.
+CBB_MAJOR = {"2", "4", "7", "8", "23"}
+
+
+def _cbb_day(day, refresh):
+    """One day's Division I games (ESPN). Days more than 3 days old are cached for good."""
+    stamp = day.strftime("%Y%m%d")
+    raw = _cached(f"cbb_{stamp}.json",
+                  lambda: _get(f"{CBB_URL}?dates={stamp}&groups=50&limit=500")[0], use_cache=not refresh)
+    return json.loads(raw).get("events", [])
+
+
+def _cbb_line(comp, home_abbr):
+    """The Vegas line as (spread, total): spread is points the HOME team is favored by."""
+    odds = (comp.get("odds") or [{}])[0]
+    total = odds.get("overUnder")
+    spread = None
+    details = (odds.get("details") or "").strip()
+    if details.upper() in ("EVEN", "PK", "PICK"):
+        spread = 0.0
+    elif details:
+        parts = details.rsplit(" ", 1)
+        try:
+            pts = float(parts[-1])
+            fav = parts[0].strip() if len(parts) == 2 else ""
+            spread = -pts if fav == home_abbr else pts  # "LAM -2.5" with Lamar at home: home favored by 2.5
+        except ValueError:
+            spread = None
+    return spread, (float(total) if total is not None else None)
+
+
+def cbb_games(current_season):
+    """Men's college basketball games for the current season. Only games with a Top 25 team or
+    two teams from the big five conferences. Each game's "week" is its day of the season, so
+    the website and app show one day at a time."""
+    start = datetime(current_season, 11, 1, tzinfo=EASTERN)
+    end = datetime(current_season + 1, 4, 10, tzinfo=EASTERN)
+    today = datetime.now(EASTERN).replace(hour=0, minute=0, second=0, microsecond=0)
+    last = min(end, today + timedelta(days=7))
+    events, day = [], start
+    while day <= last:
+        events += _cbb_day(day, refresh=day >= today - timedelta(days=3))
+        day += timedelta(days=1)
+
+    raw_names, ids_for = {}, {}
+    for e in events:
+        for t in e["competitions"][0]["competitors"]:
+            team = t["team"]
+            name = team.get("shortDisplayName") or team.get("location") or team.get("abbreviation")
+            raw_names[team["id"]] = (name, team.get("abbreviation") or name, team.get("displayName") or name)
+            ids_for.setdefault(name, set()).add(team["id"])
+
+    def team_key(tid):
+        name, abbr, _ = raw_names[tid]
+        return name if len(ids_for.get(name, ())) == 1 else f"{name} ({abbr})"
+
+    first = None
+    for e in events:
+        k = parse_iso(e["competitions"][0].get("date") or e.get("date"))
+        if k and (first is None or k < first):
+            first = k
+    first_day = first.astimezone(EASTERN).date() if first else start.date()
+
+    names, games, seen = {}, [], set()
+    for e in events:
+        comp = e["competitions"][0]
+        if e["id"] in seen or len(comp.get("competitors", [])) != 2:
+            continue
+        seen.add(e["id"])
+        home = next((t for t in comp["competitors"] if t.get("homeAway") == "home"), None)
+        away = next((t for t in comp["competitors"] if t.get("homeAway") == "away"), None)
+        if not home or not away:
+            continue
+        ranked = any((t.get("curatedRank") or {}).get("current", 99) <= 25 for t in (home, away))
+        major = all(t["team"].get("conferenceId") in CBB_MAJOR for t in (home, away))
+        if not (ranked or major):
+            continue
+        k = parse_iso(comp.get("date") or e.get("date"))
+        state = comp.get("status", {}).get("type", {})
+        final = bool(state.get("completed"))
+        hk, ak = team_key(home["team"]["id"]), team_key(away["team"]["id"])
+        names[hk] = raw_names[home["team"]["id"]][2]
+        names[ak] = raw_names[away["team"]["id"]][2]
+        spread, total = _cbb_line(comp, home["team"].get("abbreviation"))
+        day_no = (k.astimezone(EASTERN).date() - first_day).days + 1 if k else None
+        games.append({
+            "id": f"cbb_{e['id']}", "season": current_season, "week": day_no,
+            "kickoff": iso(k), "home": hk, "away": ak,
+            "home_score": int(home["score"]) if final and home.get("score") not in (None, "") else None,
+            "away_score": int(away["score"]) if final and away.get("score") not in (None, "") else None,
+            "neutral": bool(comp.get("neutralSite")), "spread": spread, "total": total,
+        })
+    return games, names
+
+
 # ---------------------------------------------------------------- MLB (statsapi.mlb.com, no key)
 
 MLB_URL = "https://statsapi.mlb.com/api/v1/schedule"

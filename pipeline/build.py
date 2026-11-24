@@ -163,6 +163,22 @@ def build_nba(meta):
            names=names, message=message, has_totals=True)
 
 
+def build_cbb(meta):
+    season = season_for(10)  # named for the year it starts in November
+    games, names = src.cbb_games(season)
+    # ESPN drops the line once a game starts, so keep the last line we saw for each game.
+    saved = {g["id"]: g for g in read_json(os.path.join(DATA, "cbb.json"), {}).get("games", [])}
+    for g in games:
+        old = saved.get(g["id"], {})
+        if g.get("spread") is None:
+            g["spread"] = old.get("spread")
+        if g.get("total") is None:
+            g["total"] = old.get("total")
+    out, ratings = model.run(games, model.CBB)
+    finish("cbb", out, ratings, history_from=season, pick_mode="spread", names=names,
+           has_totals=True, only_lined=True)
+
+
 def build_mlb(meta):
     season = season_for(3)  # late March through October
     games = src.mlb_games(2023, season)
@@ -177,11 +193,11 @@ def build_mlb(meta):
 def main():
     meta_path = os.path.join(DATA, "meta.json")
     meta = read_json(meta_path, {})
-    only = sys.argv[1:] or ["nfl", "college", "nba", "mlb"]
+    only = sys.argv[1:] or ["nfl", "college", "nba", "cbb", "mlb"]
     failed = []
     for league in only:
         try:
-            {"nfl": build_nfl, "college": build_college, "nba": build_nba, "mlb": build_mlb}[league](meta)
+            {"nfl": build_nfl, "college": build_college, "nba": build_nba, "cbb": build_cbb, "mlb": build_mlb}[league](meta)
             meta.setdefault("errors", {}).pop(league, None)
         except Exception as e:  # keep the last good file for this league
             traceback.print_exc()

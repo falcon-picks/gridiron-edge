@@ -37,6 +37,8 @@ COLLEGE = Settings(0.10, 2.5, 28, 0.40)
 # NBA totals: average miss about 15 points vs 16.4 for guessing the league average (2023-24 to 2025-26).
 NBA = Settings(0.05, 2.5, 20, 0.33, total_learning_rate=0.05, league_average_start=115)
 MLB = Settings(0.02, 0.25, 6, 0.5)
+# College basketball: about 3.5 points of home edge; totals start near the national average.
+CBB = Settings(0.06, 3.5, 25, 0.5, total_learning_rate=0.05, league_average_start=72)
 
 
 def _signed(v):
