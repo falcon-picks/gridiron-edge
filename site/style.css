@@ -368,3 +368,23 @@ body.locked .tabs, body.locked .leagues, body.locked #about-btn { display: none;
 #invite-offer:empty { display: none; }
 
 .invite-new-row { outline: 2px solid #ffd27a; border-radius: 10px; }
+
+/* Invite cards: roomy and easy to tap on a phone */
+#invite-list { display: grid; gap: 12px; background: none; border: 0; }
+.invite-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; }
+.invite-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.invite-name { font-size: 18px; }
+.invite-no { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.invite-status { font-size: 14px; }
+.invite-warn { font-size: 14px; font-weight: 700; }
+.invite-card .invite-link { width: 100%; margin: 0; }
+.invite-send, .invite-manage { display: flex; gap: 10px; flex-wrap: wrap; }
+.invite-send .pick { flex: 1 1 160px; min-height: 46px; font-size: 16px; }
+.invite-manage { justify-content: flex-end; padding-top: 6px; border-top: 1px dashed var(--line); }
+.invite-manage .pick { min-height: 40px; }
+@media (max-width: 520px) {
+  .invite-new { flex-direction: column; }
+  .invite-new input, .invite-new .pick { min-height: 46px; font-size: 16px; }
+  .invite-send { flex-direction: column; }
+  .invite-send .pick { flex: none; width: 100%; }
+}

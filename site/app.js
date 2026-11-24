@@ -1067,11 +1067,22 @@ async function loadInvites() {
 }
 function renderInvites() {
   const when = (t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  $("#invite-list").innerHTML = invites.length ? invites.map((v) => `<div class="row invite-row${state.inviteNew === v.id ? " invite-new-row" : ""}">
-    <span class="t"><b>${esc(v.name)}</b>${v.player_no ? ` <span class="r">· ${playerNoLabel(v.player_no)}</span>` : ""}<br><span class="r">${v.claimed_at ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved to a new device ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}${v.moves >= 3 ? `<br><b class="warn">⚠ This link may be shared with other people. Press Reset and send ${esc(v.name)} the new link.</b>` : ""}` : "Link not opened yet"}</span>
-    <input class="invite-link" readonly value="${esc(inviteLink(v.code))}"></span>
-    <span class="invite-btns">${navigator.share ? `<button class="pick primary" data-invite-share="${esc(v.code)}">Share</button>` : ""}<button class="pick${navigator.share ? "" : " primary"}" data-invite-copy="${esc(v.code)}">Copy link</button>
-    <button class="pick" data-invite-reset="${v.id}">Reset</button><button class="pick danger" data-invite-remove="${v.id}">Remove</button></span></div>`).join("")
+  // Newest first, so a link you just made is at the top. Every button says whose link it is.
+  const list = [...invites].sort((a, b) => (b.id || 0) - (a.id || 0));
+  $("#invite-list").innerHTML = list.length ? list.map((v) => {
+    const who = esc(v.name);
+    const status = v.claimed_at
+      ? `✓ In use on a device since ${esc(when(v.claimed_at))}${v.moves ? ` · moved ${v.moves} time${v.moves === 1 ? "" : "s"}` : ""}`
+      : "Link not opened yet";
+    return `<div class="invite-card${state.inviteNew === v.id ? " invite-new-row" : ""}">
+    <div class="invite-head"><b class="invite-name">${who}</b><span class="invite-no">${v.player_no ? playerNoLabel(v.player_no) : ""}</span></div>
+    <div class="r invite-status">${status}</div>
+    ${v.moves >= 3 ? `<div class="warn invite-warn">⚠ This link may be shared with other people. Press Reset and send ${who} the new link.</div>` : ""}
+    <input class="invite-link" readonly value="${esc(inviteLink(v.code))}" aria-label="${who}'s link">
+    <div class="invite-send">${navigator.share ? `<button class="pick primary" data-invite-share="${esc(v.code)}">Share ${who}'s link</button>` : ""}<button class="pick${navigator.share ? "" : " primary"}" data-invite-copy="${esc(v.code)}">Copy ${who}'s link</button></div>
+    <div class="invite-manage"><button class="pick" data-invite-reset="${v.id}">Reset</button><button class="pick danger" data-invite-remove="${v.id}">Remove</button></div>
+  </div>`;
+  }).join("")
     : `<div class="row"><span class="t r">No invites yet. Type a name above and press Create link.</span></div>`;
 }
 async function createInvite() {
@@ -1089,7 +1100,7 @@ async function createInvite() {
 /** Copies one person's link. Runs right inside the tap, with a fallback for browsers that block the clipboard. */
 function copyInvite(code) {
   const v = invites.find((x) => x.code === code), link = inviteLink(code);
-  const done = () => { $("#invite-status").textContent = `Copied ${v ? v.name + "'s" : "the"} link. Paste it into a text or email to ${v ? v.name : "them"}.`; };
+  const done = () => { $("#invite-status").textContent = `Copied ${v ? v.name + "'s (Player #" + v.player_no + ")" : "the"} link. Paste it into a text or email to ${v ? v.name : "them"}.`; };
   const fallback = () => {
     const box = [...document.querySelectorAll(".invite-link")].find((i) => i.value === link);
     if (box) { box.focus(); box.select(); box.setSelectionRange(0, link.length); }
@@ -1103,7 +1114,8 @@ function copyInvite(code) {
 /** Opens the phone's share sheet (Messages, email…) with one person's link, like the app's Send link. */
 function shareInvite(code) {
   const v = invites.find((x) => x.code === code);
-  navigator.share({ title: "Your Gridiron Edge invite", text: `Here's your personal Gridiron Edge link${v ? ", " + v.name : ""}. Open it on the phone or computer you'll play on. It works on one device at a time.`, url: inviteLink(code) })
+  $("#invite-status").textContent = v ? `Sharing ${v.name}'s link (Player #${v.player_no})…` : "";
+  navigator.share({ title: v ? `Gridiron Edge invite for ${v.name}` : "Your Gridiron Edge invite", text: `Here's your personal Gridiron Edge link${v ? ", " + v.name : ""}. Open it on the phone or computer you'll play on. It works on one device at a time.`, url: inviteLink(code) })
     .then(() => { $("#invite-status").textContent = `Shared ${v ? v.name + "'s" : "the"} link.`; })
     .catch(() => {});
 }
