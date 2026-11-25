@@ -76,7 +76,9 @@ const margin = (g) => (isFinal(g) ? g.home_score - g.away_score : null);
 /** The administrator's deadline for all picks, if one is set. */
 const picksDeadline = () => (state.settings.picks_close ? new Date(state.settings.picks_close) : null);
 const picksClosed = () => { const d = picksDeadline(); return !!d && d <= new Date(); };
-const isLocked = (g) => isFinal(g) || (g.kickoff && new Date(g.kickoff) <= new Date()) || picksClosed();
+/** Each game closes for picks 30 minutes before it starts (the database enforces the same rule). */
+const PICK_CUTOFF_MS = 30 * 60 * 1000;
+const isLocked = (g) => isFinal(g) || (g.kickoff && new Date(g.kickoff).getTime() - PICK_CUTOFF_MS <= Date.now()) || picksClosed();
 /** Whether this league has over/unders to show (NFL and college come with them; NBA from The Odds API). */
 const hasTotals = () => D().has_totals || D().games.some((g) => g.total != null);
 const team = (g, side) => (side === "home" ? g.home : g.away);
@@ -214,7 +216,7 @@ function gameCard(g) {
     </button>`;
   const ouBtn = (side) => `<button class="pick" data-total="${side}" data-id="${esc(g.id)}" aria-pressed="${myTotal === side}" ${locked ? "disabled" : ""}>${ouLabel(side)} ${pts(g.total)}</button>`;
   return `<article class="card sheet">
-    <div class="card-head"><span class="when">${esc(when(g))}${g.neutral ? " · Neutral site" : ""}</span>${locked ? '<span class="locked">🔒 Locked</span>' : ""}</div>
+    <div class="card-head"><span class="when">${esc(when(g))}${g.neutral ? " · Neutral site" : ""}</span>${locked ? `<span class="locked">🔒 ${isFinal(g) ? "Final" : "Picks closed"}</span>` : g.kickoff ? `<span class="when">Picks close ${esc(new Date(new Date(g.kickoff).getTime() - PICK_CUTOFF_MS).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }))}</span>` : ""}</div>
     <div class="teams">${teamBtn("away")}<span class="at">${g.neutral ? "vs." : "at"}</span>${teamBtn("home")}</div>
     <div class="lines">
       <span><span class="label">Spread</span> ${esc(g.spread != null ? lineText(g) : "No line yet")}</span>
